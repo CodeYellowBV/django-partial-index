@@ -30,9 +30,9 @@ Requirements:
 Set up a PartialIndex and insert it into your model's class-based Meta.indexes list:
 
 ```python
-from partial_index import PartialIndex
+from partial_index import PartialIndex, PartialUniqueValidations
 
-class MyModel(models.Model):
+class MyModel(PartialUniqueValidations, models.Model):
     class Meta:
         indexes = [
             PartialIndex(fields=['user', 'room'], unique=True, where='deleted_at IS NULL'),
@@ -42,6 +42,11 @@ class MyModel(models.Model):
 
 Of course, these (unique) indexes could be created by a handwritten [RunSQL migration](https://docs.djangoproject.com/en/1.11/ref/migration-operations/#runsql).
 But the constraints are part of the business logic, and best kept close to the model definitions.
+
+The `PartialUniqueValidations` mixin is optional but highly recommended if you want proper validations on unique indexes.
+In other words, with this mixin you can use django-partial-index as a scoped alternative to Django's `unique_together`
+meta option.  It must be listed *before* the base model in your base class list for correct method lookup, or you must 
+manually call `validate_unique()` from `PartialUniqueValidations`.
 
 ### Partial unique constraints
 

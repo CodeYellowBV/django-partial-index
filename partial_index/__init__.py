@@ -16,8 +16,10 @@ if tuple(django.VERSION[:2]) < MIN_DJANGO_VERSION:
     raise ImportError(DJANGO_VERSION_ERROR)
 
 
+from django.db import connections
 from django.db.models import Index
-
+from django.db.models.expressions import RawSQL
+from django.core.exceptions import NON_FIELD_ERRORS, ValidationError
 
 class PartialIndex(Index):
     suffix = 'partial'
@@ -70,11 +72,12 @@ class PartialIndex(Index):
         kwargs['where_sqlite'] = self.where_sqlite
         return path, args, kwargs
 
-    def get_valid_vendor(self, schema_editor):
-        vendor = schema_editor.connection.vendor
-        if vendor not in self.sql_create_index:
-            raise ValueError('Database vendor %s is not supported for django-partial-index.' % vendor)
-        return vendor
+    @classmethod
+    def get_valid_vendor_for_connection(cls, connection):
+        v = connection.vendor
+        if v not in cls.sql_create_index:
+            raise ValueError('Database vendor %s is not supported for django-partial-index.' % v)
+        return v
 
     def get_sql_create_template_values(self, model, schema_editor, using):
         # This method exists on Django 1.11 Index class, but has been moved to the SchemaEditor on Django 2.0.
@@ -101,17 +104,21 @@ class PartialIndex(Index):
         parameters['unique'] = ' UNIQUE' if self.unique else ''
         # Note: the WHERE predicate is not yet checked for syntax or field names, and is inserted into the CREATE INDEX query unescaped.
         # This is bad for usability, but is not a security risk, as the string cannot come from user input.
-        vendor = self.get_valid_vendor(schema_editor)
-        if vendor == 'postgresql':
-            parameters['where'] = self.where_postgresql or self.where
-        elif vendor == 'sqlite':
-            parameters['where'] = self.where_sqlite or self.where
-        else:
-            raise ValueError('Should never happen')
+        vendor = self.get_valid_vendor_for_connection(schema_editor.connection)
+        parameters['where'] = self.get_where_condition_for_vendor(vendor)
         return parameters
 
+    def get_where_condition_for_vendor(self, vendor):
+        if vendor == 'postgresql':
+            return self.where_postgresql or self.where
+        elif vendor == 'sqlite':
+            return self.where_sqlite or self.where
+        else:
+            raise ValueError('Should never happen')
+        
+
     def create_sql(self, model, schema_editor, using=''):
-        vendor = self.get_valid_vendor(schema_editor)
+        vendor = self.get_valid_vendor_for_connection(schema_editor.connection)
         sql_template = self.sql_create_index[vendor]
         sql_parameters = self.get_sql_create_template_values(model, schema_editor, using)
         return sql_template % sql_parameters
@@ -143,3 +150,105 @@ class PartialIndex(Index):
             'longer than 3 characters?'
         )
         self.check_name()
+
+
+
+class PartialUniqueValidations(object):
+    def validate_unique(self, exclude=None):
+        errors = {}
+
+        # First, check original/standard Django constraints
+        try:
+            super(PartialUniqueValidations, self).validate_unique(exclude=exclude)
+        except ValidationError as e:
+            errors = e.error_dict
+
+        index_checks = self._get_unique_partial_index_checks(exclude=exclude)
+        errors.update(self._perform_unique_partial_index_checks(index_checks))
+
+        if errors:
+            raise ValidationError(errors)
+
+
+    def _unique_partial_indexes_for_class(self, cls):
+        return [i for i in cls._meta.indexes if isinstance(i, PartialIndex) and i.unique]
+
+
+    def _get_unique_partial_index_checks(self, exclude=None):
+        if exclude is None:
+            exclude = []
+
+        indexes_to_check = []
+
+        # Build list of unique partial indexes per class
+        i = self._unique_partial_indexes_for_class(self.__class__)
+        unique_indexes = [(self.__class__, i)]
+        for parent_class in self._meta.get_parent_list():
+            if parent_class._meta.indexes:
+                i = self._unique_partial_indexes_for_class(parent_class._meta.indexes)
+                if i:
+                    unique_indexes.append((parent_class, i))
+
+        # Omit index checks that have any excluded fields
+        for model_class, checks in unique_indexes:
+            for unique_index in checks:
+                for name in unique_index.fields:
+                    if name in exclude:
+                        break
+                else:
+                    indexes_to_check.append((model_class, unique_index))
+
+        return indexes_to_check
+
+
+    def _perform_unique_partial_index_checks(self, unique_checks):
+        errors = {}
+
+        for model_class, unique_check in unique_checks:
+            # Try to look up an existing object with the same values as this
+            # object's values for all the unique field.
+
+            lookup_kwargs = {}
+            for field_name in unique_check.fields:
+                f = self._meta.get_field(field_name)
+                lookup_value = getattr(self, f.attname)
+                # TODO: Handle multiple backends with different feature flags.
+                if (lookup_value is None or
+                        (lookup_value == '' and connection.features.interprets_empty_strings_as_nulls)):
+                    # no value, skip the lookup
+                    continue
+                if f.primary_key and not self._state.adding:
+                    # no need to check for unique primary key when editing
+                    continue
+                lookup_kwargs[str(field_name)] = lookup_value
+
+            # some fields were skipped, no reason to do the check
+            if len(unique_check.fields) != len(lookup_kwargs):
+                continue
+
+            qs = model_class._default_manager.filter(**lookup_kwargs)
+
+            # Exclude the current object from the query if we are editing an
+            # instance (as opposed to creating a new one)
+            # Note that we need to use the pk as defined by model_class, not
+            # self.pk. These can be different fields because model inheritance
+            # allows single model to have effectively multiple primary keys.
+            # Refs #17615.
+            model_class_pk = self._get_pk_val(model_class._meta)
+            if not self._state.adding and model_class_pk is not None:
+                qs = qs.exclude(pk=model_class_pk)
+
+            # See also the NOTE in PartialIndex.get_sql_create_template_values()!
+            vendor = PartialIndex.get_valid_vendor_for_connection(connections[model_class._default_manager.db])
+            qs = qs.annotate(_partial_index_where=RawSQL(unique_check.get_where_condition_for_vendor(vendor), []))
+            qs = qs.filter(_partial_index_where=True)
+
+            if qs.exists():
+                if len(unique_check.fields) == 1:
+                    key = unique_check.fields[0]
+                else:
+                    key = NON_FIELD_ERRORS
+                errors.setdefault(key, []).append(self.unique_error_message(model_class, unique_check.fields))
+
+        return errors
+        

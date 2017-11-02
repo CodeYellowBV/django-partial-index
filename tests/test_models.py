@@ -2,6 +2,7 @@
 Tests for actual use of the indexes after creating models with them.
 """
 from django.db import IntegrityError
+from django.core.exceptions import NON_FIELD_ERRORS, ValidationError
 from django.test import TestCase
 from django.utils import timezone
 
@@ -35,10 +36,28 @@ class PartialIndexRoomBookingTest(TestCase):
             book.save()
         RoomBooking.objects.create(user=self.user1, room=self.room1)
 
+    def test_roombooking_same_mark_first_deleted_passes_full_clean(self):
+        for i in range(3):
+            book = RoomBooking.objects.create(user=self.user1, room=self.room1)
+            book.deleted_at = timezone.now()
+            book.save()
+        RoomBooking(user=self.user1, room=self.room1).full_clean()
+
     def test_roombooking_same_conflict(self):
         RoomBooking.objects.create(user=self.user1, room=self.room1)
         with self.assertRaises(IntegrityError):
             RoomBooking.objects.create(user=self.user1, room=self.room1)
+
+    def test_roombooking_same_full_clean_raises_validation_error(self):
+        RoomBooking.objects.create(user=self.user1, room=self.room1)
+        bad_rb = RoomBooking(user=self.user1, room=self.room1)
+        with self.assertRaises(ValidationError) as cm:
+            bad_rb.full_clean()
+
+        self.assertIn(NON_FIELD_ERRORS, cm.exception.error_dict)
+        errs = cm.exception.error_dict[NON_FIELD_ERRORS]
+        self.assertEqual(1, len(errs))
+        self.assertEqual('unique_together', errs[0].code)
 
 
 class PartialIndexJobTest(TestCase):
