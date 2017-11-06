@@ -205,6 +205,8 @@ class PartialUniqueValidations(object):
         errors = {}
 
         for model_class, unique_check in unique_checks:
+            connection = connections[model_class._default_manager.db]
+
             # Try to look up an existing object with the same values as this
             # object's values for all the unique field.
 
@@ -239,7 +241,7 @@ class PartialUniqueValidations(object):
                 qs = qs.exclude(pk=model_class_pk)
 
             # See also the NOTE in PartialIndex.get_sql_create_template_values()!
-            vendor = PartialIndex.get_valid_vendor_for_connection(connections[model_class._default_manager.db])
+            vendor = PartialIndex.get_valid_vendor_for_connection(connection)
             qs = qs.annotate(_partial_index_where=RawSQL(unique_check.get_where_condition_for_vendor(vendor), []))
             qs = qs.filter(_partial_index_where=True)
 

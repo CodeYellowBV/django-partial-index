@@ -84,3 +84,37 @@ class PartialIndexJobTest(TestCase):
         job1 = Job.objects.create(order=1, group=1)
         job2 = Job.objects.create(order=1, group=1, is_complete=True)
         self.assertEqual(job1.order, job2.order)
+
+
+class PartialIndexRoomTest(TestCase):
+    """Test that partial unique constraints with empty where condition on
+    text fields work.
+    """
+    def test_room_empty_name_works_once(self):
+        room1 = Room(name='')
+        room1.full_clean()
+        room1.save()
+
+        room2 = Room(name='')
+        with self.assertRaises(ValidationError) as cm:
+            room2.full_clean()
+
+        self.assertIn('name', cm.exception.error_dict)
+        errs = cm.exception.error_dict['name']
+        self.assertEqual(1, len(errs))
+        self.assertEqual('unique', errs[0].code)
+
+
+    def test_unique_constraint_triggers_only_on_room_with_same_name(self):
+        room1 = Room(name='first room')
+        room1.full_clean()
+        room1.save()
+
+        room2 = Room(name='second room')
+        room2.full_clean()
+        room2.save()
+
+        room3 = Room(name='second room')
+        with self.assertRaises(ValidationError):
+            room3.full_clean()
+

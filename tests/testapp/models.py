@@ -12,8 +12,11 @@ class User(models.Model):
     name = models.CharField(max_length=50)
 
 
-class Room(models.Model):
-    name = models.CharField(max_length=50)
+class Room(PartialUniqueValidations, models.Model):
+    name = models.CharField(max_length=50, blank=True)
+
+    class Meta:
+        indexes = [PartialIndex(fields=['name'], unique=True, where='1=1')] # Basically just unique=True on name
 
 
 class RoomBooking(PartialUniqueValidations, models.Model):
