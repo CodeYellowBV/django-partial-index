@@ -5,7 +5,7 @@ from django.db import IntegrityError
 from django.test import TestCase
 from django.utils import timezone
 
-from testapp.models import User, Room, RoomBookingText, JobText, ComparisonText, RoomBookingQ, JobQ, ComparisonQ
+from testapp.models import User, Room, RoomBookingText, JobText, ComparisonText, NullableRoomNumberText, RoomBookingQ, JobQ, ComparisonQ, NullableRoomNumberQ
 
 
 class PartialIndexRoomBookingTest(TestCase):
@@ -137,3 +137,63 @@ class PartialIndexComparisonTest(TestCase):
     def test_comparison_q_duplicate_different_numbers(self):
         ComparisonQ.objects.create(a=1, b=2)
         ComparisonQ.objects.create(a=1, b=2)
+
+
+class PartialIndexRoomNumberTest(TestCase):
+    """Test that partial unique constraints work as expected when inserting data to the db.
+
+    Models and indexes are created when django creates the test db, they do not need to be set up.
+    """
+
+    def setUp(self):
+        self.room1 = Room.objects.create(name='Room1')
+        self.room2 = Room.objects.create(name='Room2')
+
+    def test_nullable_roomnumber_text_different_rooms(self):
+        NullableRoomNumberText.objects.create(room=self.room1, room_number=1)
+        NullableRoomNumberText.objects.create(room=self.room2, room_number=1)
+
+    def test_nullable_roomnumber_q_different_rooms(self):
+        NullableRoomNumberQ.objects.create(room=self.room1, room_number=1)
+        NullableRoomNumberQ.objects.create(room=self.room2, room_number=1)
+
+    def test_nullable_roomnumber_text_different_room_numbers(self):
+        NullableRoomNumberText.objects.create(room=self.room1, room_number=1)
+        NullableRoomNumberText.objects.create(room=self.room1, room_number=2)
+
+    def test_nullable_roomnumber_q_different_users(self):
+        NullableRoomNumberQ.objects.create(room=self.room1, room_number=1)
+        NullableRoomNumberQ.objects.create(room=self.room1, room_number=2)
+
+    def test_nullable_roomnumber_text_same_mark_first_deleted(self):
+        for i in range(3):
+            nr = NullableRoomNumberText.objects.create(room=self.room1, room_number=1)
+            nr.deleted_at = timezone.now()
+            nr.save()
+        NullableRoomNumberText.objects.create(room=self.room1, room_number=1)
+
+    def test_nullable_roomnumber_q_same_mark_first_deleted(self):
+        for i in range(3):
+            nr = NullableRoomNumberQ.objects.create(room=self.room1, room_number=1)
+            nr.deleted_at = timezone.now()
+            nr.save()
+        NullableRoomNumberQ.objects.create(room=self.room1, room_number=1)
+
+    def test_nullable_roomnumber_text_same_conflict(self):
+        NullableRoomNumberText.objects.create(room=self.room1, room_number=1)
+        with self.assertRaises(IntegrityError):
+            NullableRoomNumberText.objects.create(room=self.room1, room_number=1)
+
+    def test_nullable_roomnumber_q_same_conflict(self):
+        NullableRoomNumberQ.objects.create(room=self.room1, room_number=1)
+        with self.assertRaises(IntegrityError):
+            NullableRoomNumberQ.objects.create(room=self.room1, room_number=1)
+
+
+    def test_nullable_roomnumber_text_same_no_conflict_for_null_number(self):
+        NullableRoomNumberText.objects.create(room=self.room1, room_number=None)
+        NullableRoomNumberText.objects.create(room=self.room1, room_number=None)
+
+    def test_nullable_roomnumber_q_same_no_conflict_for_null_number(self):
+        NullableRoomNumberQ.objects.create(room=self.room1, room_number=None)
+        NullableRoomNumberQ.objects.create(room=self.room1, room_number=None)

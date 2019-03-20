@@ -6,8 +6,8 @@ import datetime
 from django.core.exceptions import ImproperlyConfigured
 from django.test import TestCase
 
-from testapp.forms import RoomBookingAllFieldsForm, RoomBookingNoConditionFieldForm, RoomBookingJustRoomForm, RoomBookingTextForm
-from testapp.models import User, Room, RoomBookingQ
+from testapp.forms import RoomBookingAllFieldsForm, RoomBookingNoConditionFieldForm, RoomBookingJustRoomForm, RoomBookingTextForm, NullableRoomNumberAllFieldsForm
+from testapp.models import User, Room, RoomBookingQ, NullableRoomNumberQ
 
 
 class OnlyQTestCase(TestCase):
@@ -93,3 +93,63 @@ class SingleFieldFormTest(FormTestCase, TestCase):
     These have to be provided from an existing instance.
     """
     formclass = RoomBookingJustRoomForm
+
+
+class NullableFieldFormTest(TestCase):
+    """Test that partial unique validation on a ModelForm treats null values as non-unique."""
+    formclass = NullableRoomNumberAllFieldsForm
+    conflict_error = 'NullableRoomNumberQ with the same values for room, room_number already exists.'
+
+    def setUp(self):
+        self.room1 = Room.objects.create(name='Room1')
+        self.room2 = Room.objects.create(name='Room2')
+        self.number1_1 = NullableRoomNumberQ.objects.create(room=self.room1, room_number=1)
+        self.number1_2 = NullableRoomNumberQ.objects.create(room=self.room1, room_number=2)
+        self.number2_1 = NullableRoomNumberQ.objects.create(room=self.room2, room_number=1)
+        self.number2_none = NullableRoomNumberQ.objects.create(room=self.room2, room_number=None)
+
+    def test_add_duplicate_invalid(self):
+        form = self.formclass(data={'room': self.room1.id, 'room_number': 1})
+        self.assertFalse(form.is_valid(), 'Form errors: %s' % form.errors)
+        self.assertIn(self.conflict_error, form.errors['__all__'])
+
+    def test_add_duplicate_when_deleted_valid(self):
+        self.number1_1.deleted_at = datetime.datetime.utcnow()
+        self.number1_1.save()
+        
+        form = self.formclass(data={'room': self.room1.id, 'room_number': 1})
+        self.assertTrue(form.is_valid(), 'Form errors: %s' % form.errors)
+        self.assertFalse(form.errors)
+
+    def test_add_non_duplicate_valid(self):
+        form = self.formclass(data={'room': self.room1.id, 'room_number': 3})
+        self.assertTrue(form.is_valid(), 'Form errors: %s' % form.errors)
+        self.assertFalse(form.errors)
+
+    def test_modify_existing_valid(self):
+        form = self.formclass(data={'room': self.room1.id, 'room_number': 3}, instance=self.number1_1)
+        self.assertTrue(form.is_valid(), 'Form errors: %s' % form.errors)
+        self.assertFalse(form.errors)
+
+    def test_modify_another_to_be_duplicate_on_fk_invalid(self):
+        form = self.formclass(data={'room': self.room1.id, 'room_number': 1}, instance=self.number2_1)
+        self.assertFalse(form.is_valid(), 'Form errors: %s' % form.errors)
+        self.assertIn(self.conflict_error, form.errors['__all__'])
+
+    def test_modify_another_to_be_duplicate_on_integer_invalid(self):
+        form = self.formclass(data={'room': self.room1.id, 'room_number': 2}, instance=self.number1_1)
+        self.assertFalse(form.is_valid(), 'Form errors: %s' % form.errors)
+        self.assertIn(self.conflict_error, form.errors['__all__'])
+
+    def test_modify_another_to_be_duplicate_on_nulled_field_valid(self):
+        form = self.formclass(data={'room': self.room2.id, 'room_number': None}, instance=self.number2_1)
+        self.assertTrue(form.is_valid(), 'Form errors: %s' % form.errors)
+        self.assertFalse(form.errors)
+
+    def test_modify_another_to_be_duplicate_when_deleted_valid(self):
+        self.number1_1.deleted_at = datetime.datetime.utcnow()
+        self.number1_1.save()
+
+        form = self.formclass(data={'room': self.room1.id, 'room_number': 1}, instance=self.number2_none)
+        self.assertTrue(form.is_valid(), 'Form errors: %s' % form.errors)
+        self.assertFalse(form.errors)

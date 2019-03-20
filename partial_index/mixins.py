@@ -75,7 +75,16 @@ class ValidatePartialUniqueMixin(object):
                     raise RuntimeError('Unable to use ValidatePartialUniqueMixin: expecting to find fields %s on model. ' +
                                        'This is a bug in the PartialIndex definition or the django-partial-index library itself.')
 
-                values = {field_name: getattr(self, field_name) for field_name in mentioned_fields}
+                values = {}
+                for field_name in mentioned_fields:
+                    field_value = getattr(self, field_name)
+                    if field_value is None and field_name in idx.fields:
+                        # Can never be unique if value is NULL.  If
+                        # field is non-nullable we'll get a validation
+                        # error from the field validations themselves.
+                        return
+                    else:
+                        values[field_name] = field_value
 
                 conflict = self.__class__.objects.filter(**values)  # Step 1 and 3
                 conflict = conflict.filter(where)  # Step 2
