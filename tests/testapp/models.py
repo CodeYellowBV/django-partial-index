@@ -97,3 +97,21 @@ class ComparisonQ(models.Model):
         indexes = [
             PartialIndex(fields=['a', 'b'], unique=True, where=PQ(a=PF('b'))),
         ]
+
+
+class NullableRoomNumberText(ValidatePartialUniqueMixin, models.Model):
+    room = models.ForeignKey(Room, on_delete=models.CASCADE)
+    room_number = models.IntegerField(null=True, blank=True)
+    deleted_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        indexes = [PartialIndex(fields=['room', 'room_number'], unique=True, where='deleted_at IS NULL')]
+
+
+class NullableRoomNumberQ(ValidatePartialUniqueMixin, models.Model):
+    room = models.ForeignKey(Room, on_delete=models.CASCADE)
+    room_number = models.IntegerField(null=True, blank=True)
+    deleted_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        indexes = [PartialIndex(fields=['room', 'room_number'], unique=True, where=PQ(deleted_at__isnull=True))]
