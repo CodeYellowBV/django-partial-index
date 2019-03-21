@@ -21,7 +21,7 @@ class FormTestCase(object):
     """Base class for form tests.
     """
     formclass = None
-    conflict_error = 'RoomBookingQ with the same values for room, user already exists.'
+    conflict_error = 'Room booking q with this Room and User already exists.'
 
     def setUp(self):
         self.user1 = User.objects.create(name='User1')
@@ -98,7 +98,7 @@ class SingleFieldFormTest(FormTestCase, TestCase):
 class NullableFieldFormTest(TestCase):
     """Test that partial unique validation on a ModelForm treats null values as non-unique."""
     formclass = NullableRoomNumberAllFieldsForm
-    conflict_error = 'NullableRoomNumberQ with the same values for room, room_number already exists.'
+    conflict_error = 'Nullable room number q with this Room and Room number already exists.'
 
     def setUp(self):
         self.room1 = Room.objects.create(name='Room1')
