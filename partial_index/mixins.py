@@ -1,3 +1,4 @@
+from collections import defaultdict
 from django.core.exceptions import ImproperlyConfigured, ValidationError, NON_FIELD_ERRORS
 from django.db.models import Q
 
@@ -73,6 +74,7 @@ class ValidatePartialUniqueMixin(object):
         if unique_idxs:
             model_fields = set(f.name for f in self._meta.get_fields(include_parents=True, include_hidden=True))
 
+            errors = defaultdict(list)
             for idx in unique_idxs:
                 where = idx.where
                 if not isinstance(where, Q):
@@ -88,7 +90,20 @@ class ValidatePartialUniqueMixin(object):
                     raise RuntimeError('Unable to use ValidatePartialUniqueMixin: expecting to find fields %s on model. ' +
                                        'This is a bug in the PartialIndex definition or the django-partial-index library itself.')
 
-                values = {field_name: getattr(self, field_name) for field_name in mentioned_fields}
+                values = {}
+                skip = False
+                for field_name in mentioned_fields:
+                    field_value = getattr(self, field_name)
+                    if field_value is None and field_name in idx.fields:
+                        # Can never be unique if value is NULL.  If
+                        # field is non-nullable we'll get a validation
+                        # error from the field validations themselves.
+                        skip = True
+                    else:
+                        values[field_name] = field_value
+
+                if skip:
+                    continue
 
                 conflict = self.__class__.objects.filter(**values)  # Step 1 and 3
                 conflict = conflict.filter(where)  # Step 2
@@ -100,4 +115,7 @@ class ValidatePartialUniqueMixin(object):
                         key = idx.fields[0]
                     else:
                         key = NON_FIELD_ERRORS
-                    raise PartialUniqueValidationError({key: self.unique_error_message(self.__class__, sorted(idx.fields))})
+                    errors[key].append(self.unique_error_message(self.__class__, sorted(idx.fields)))
+
+            if errors:
+                raise PartialUniqueValidationError(errors)
