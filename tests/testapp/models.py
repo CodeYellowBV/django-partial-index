@@ -65,7 +65,7 @@ class JobText(models.Model):
         ]
 
 
-class JobQ(models.Model):
+class JobQ(ValidatePartialUniqueMixin, models.Model):
     order = models.IntegerField()
     group = models.IntegerField()
     is_complete = models.BooleanField(default=False)
