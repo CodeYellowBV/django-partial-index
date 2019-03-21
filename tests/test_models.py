@@ -216,7 +216,7 @@ class PartialIndexRoomNumberTest(TransactionTestCase):
         NullableRoomNumberQ.objects.create(room=self.room1, room_number=None)
 
 
-class PartialIndexLabelValidationTest(TestCase):
+class PartialIndexLabelValidationTest(TransactionTestCase):
     """Test that partial unique validations are all executed."""
 
     def setUp(self):
@@ -264,6 +264,23 @@ class PartialIndexLabelValidationTest(TestCase):
         self.assertEqual(1, len(cm.exception.error_dict[NON_FIELD_ERRORS]))
         self.assertEqual('unique', cm.exception.error_dict['uuid'][0].code)
         self.assertEqual('unique_together', cm.exception.error_dict[NON_FIELD_ERRORS][0].code)
+
+        with self.assertRaises(IntegrityError):
+            label.save()
+
+    def test_all_partial_constraints_are_included_in_validation_errors(self):
+        Label.objects.create(label='a', user=self.user1, room=self.room1, uuid='11111111-0000-0000-0000-000000000000', created_at='2019-01-01T11:11:11')
+
+        label = Label(label='a', user=self.user1, room=self.room1, uuid='22222222-0000-0000-0000-000000000000', created_at='2019-01-02T22:22:22')
+        with self.assertRaises(ValidationError) as cm:
+            label.full_clean()
+
+        self.assertSetEqual({NON_FIELD_ERRORS}, set(cm.exception.message_dict.keys()))
+        self.assertEqual(2, len(cm.exception.error_dict[NON_FIELD_ERRORS]))
+        self.assertEqual('unique_together', cm.exception.error_dict[NON_FIELD_ERRORS][0].code)
+        self.assertEqual(['label', 'room'], cm.exception.error_dict[NON_FIELD_ERRORS][0].params['unique_check'])
+        self.assertEqual('unique_together', cm.exception.error_dict[NON_FIELD_ERRORS][1].code)
+        self.assertEqual(['label', 'user'], cm.exception.error_dict[NON_FIELD_ERRORS][1].params['unique_check'])
 
         with self.assertRaises(IntegrityError):
             label.save()
