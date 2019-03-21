@@ -1,4 +1,4 @@
-from django.core.exceptions import ImproperlyConfigured, ValidationError
+from django.core.exceptions import ImproperlyConfigured, ValidationError, NON_FIELD_ERRORS
 from django.db.models import Q
 
 from .index import PartialIndex
@@ -83,7 +83,8 @@ class ValidatePartialUniqueMixin(object):
                     conflict = conflict.exclude(pk=self.pk)  # Step 4
 
                 if conflict.exists():
-                    raise PartialUniqueValidationError('%s with the same values for %s already exists.' % (
-                        self.__class__.__name__,
-                        ', '.join(sorted(idx.fields)),
-                    ))
+                    if len(idx.fields) == 1:
+                        key = idx.fields[0]
+                    else:
+                        key = NON_FIELD_ERRORS
+                    raise PartialUniqueValidationError({key: self.unique_error_message(self.__class__, sorted(idx.fields))})

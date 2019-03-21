@@ -21,7 +21,7 @@ class FormTestCase(object):
     """Base class for form tests.
     """
     formclass = None
-    conflict_error = 'RoomBookingQ with the same values for room, user already exists.'
+    conflict_error = 'Room booking q with this Room and User already exists.'
 
     def setUp(self):
         self.user1 = User.objects.create(name='User1')

@@ -4,6 +4,7 @@ Tests for actual use of the indexes after creating models with them.
 from django.db import IntegrityError
 from django.test import TransactionTestCase
 from django.utils import timezone
+from django.core.exceptions import NON_FIELD_ERRORS, ValidationError
 
 from testapp.models import User, Room, RoomBookingText, JobText, ComparisonText, RoomBookingQ, JobQ, ComparisonQ
 
@@ -57,8 +58,16 @@ class PartialIndexRoomBookingTest(TransactionTestCase):
 
     def test_roombooking_q_same_conflict(self):
         RoomBookingQ.objects.create(user=self.user1, room=self.room1)
+
+        room_booking = RoomBookingQ(user=self.user1, room=self.room1)
+        with self.assertRaises(ValidationError) as cm:
+            room_booking.full_clean()
+
+        self.assertSetEqual({NON_FIELD_ERRORS}, set(cm.exception.message_dict.keys()))
+        self.assertEqual('unique_together', cm.exception.error_dict[NON_FIELD_ERRORS][0].code)
+
         with self.assertRaises(IntegrityError):
-            RoomBookingQ.objects.create(user=self.user1, room=self.room1)
+            room_booking.save()
 
 
 class PartialIndexJobTest(TransactionTestCase):
@@ -83,8 +92,16 @@ class PartialIndexJobTest(TransactionTestCase):
 
     def test_job_q_same_group(self):
         JobQ.objects.create(order=1, group=1)
+
+        job = JobQ(order=2, group=1)
+        with self.assertRaises(ValidationError) as cm:
+            job.full_clean()
+
+        self.assertSetEqual({'group'}, set(cm.exception.message_dict.keys()))
+        self.assertEqual('unique', cm.exception.error_dict['group'][0].code)
+
         with self.assertRaises(IntegrityError):
-            JobQ.objects.create(order=2, group=1)
+            job.save()
 
     def test_job_text_complete_same_group(self):
         job1 = JobText.objects.create(order=1, group=1, is_complete=True)
