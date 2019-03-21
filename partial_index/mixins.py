@@ -34,9 +34,22 @@ class ValidatePartialUniqueMixin(object):
     """
 
     def validate_unique(self, exclude=None):
+        errors = {}
+
         # Standard unique validation first.
-        super(ValidatePartialUniqueMixin, self).validate_unique(exclude=exclude)
-        self.validate_partial_unique()
+        try:
+            super(ValidatePartialUniqueMixin, self).validate_unique(exclude=exclude)
+        except ValidationError as e:
+            errors.update(e.error_dict)
+
+        # Merge ours into the existing errors (if any)
+        try:
+            self.validate_partial_unique()
+        except ValidationError as e:
+            errors.update(e.error_dict)
+
+        if errors:
+            raise PartialUniqueValidationError(errors)
 
     def validate_partial_unique(self):
         """Check partial unique constraints on the model and raise ValidationError if any failed.

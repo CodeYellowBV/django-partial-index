@@ -6,7 +6,7 @@ from django.test import TestCase
 from django.utils import timezone
 from django.core.exceptions import NON_FIELD_ERRORS, ValidationError
 
-from testapp.models import User, Room, RoomBookingText, JobText, ComparisonText, NullableRoomNumberText, RoomBookingQ, JobQ, ComparisonQ, NullableRoomNumberQ
+from testapp.models import User, Room, RoomBookingText, JobText, ComparisonText, NullableRoomNumberText, RoomBookingQ, JobQ, ComparisonQ, NullableRoomNumberQ, Label
 
 
 class PartialIndexRoomBookingTest(TestCase):
@@ -214,3 +214,56 @@ class PartialIndexRoomNumberTest(TestCase):
     def test_nullable_roomnumber_q_same_no_conflict_for_null_number(self):
         NullableRoomNumberQ.objects.create(room=self.room1, room_number=None)
         NullableRoomNumberQ.objects.create(room=self.room1, room_number=None)
+
+
+class PartialIndexLabelValidationTest(TestCase):
+    """Test that partial unique validations are all executed."""
+
+    def setUp(self):
+        self.room1 = Room.objects.create(name='room 1')
+        self.room2 = Room.objects.create(name='room 2')
+        self.user1 = User.objects.create(name='user 1')
+        self.user2 = User.objects.create(name='user 2')
+
+    def test_single_unique_constraints_are_still_evaluated(self):
+        Label.objects.create(label='a', user=self.user1, room=self.room1, uuid='11111111-0000-0000-0000-000000000000', created_at='2019-01-01T00:00:00')
+
+        label = Label(label='b', user=self.user2, room=self.room2, uuid='22222222-0000-0000-0000-000000000000', created_at='2019-01-01T00:00:00')
+        with self.assertRaises(ValidationError) as cm:
+            label.full_clean()
+
+        self.assertSetEqual({'created_at'}, set(cm.exception.message_dict.keys()))
+        self.assertEqual('unique', cm.exception.error_dict['created_at'][0].code)
+
+        with self.assertRaises(IntegrityError):
+            label.save()
+
+    def test_standard_single_field_unique_constraints_do_not_block_evaluation_of_partial_index_constraints(self):
+        Label.objects.create(label='a', user=self.user1, room=self.room1, uuid='11111111-0000-0000-0000-000000000000', created_at='2019-01-01T00:00:00')
+
+        label = Label(label='b', user=self.user2, room=self.room2, uuid='11111111-0000-0000-0000-000000000000', created_at='2019-01-01T00:00:00')
+        with self.assertRaises(ValidationError) as cm:
+            label.full_clean()
+
+        self.assertSetEqual({'created_at', 'uuid'}, set(cm.exception.message_dict.keys()))
+        self.assertEqual('unique', cm.exception.error_dict['created_at'][0].code)
+        self.assertEqual('unique', cm.exception.error_dict['uuid'][0].code)
+
+        with self.assertRaises(IntegrityError):
+            label.save()
+
+    def test_standard_unique_together_constraints_do_not_block_evaluation_of_partial_index_constraints(self):
+        Label.objects.create(label='a', user=self.user1, room=self.room1, uuid='11111111-0000-0000-0000-000000000000', created_at='2019-01-01T11:11:11')
+
+        label = Label(label='b', user=self.user1, room=self.room1, uuid='11111111-0000-0000-0000-000000000000', created_at='2019-01-02T22:22:22')
+        with self.assertRaises(ValidationError) as cm:
+            label.full_clean()
+
+        self.assertSetEqual({NON_FIELD_ERRORS, 'uuid'}, set(cm.exception.message_dict.keys()))
+        self.assertEqual(1, len(cm.exception.error_dict['uuid']))
+        self.assertEqual(1, len(cm.exception.error_dict[NON_FIELD_ERRORS]))
+        self.assertEqual('unique', cm.exception.error_dict['uuid'][0].code)
+        self.assertEqual('unique_together', cm.exception.error_dict[NON_FIELD_ERRORS][0].code)
+
+        with self.assertRaises(IntegrityError):
+            label.save()
