@@ -119,7 +119,7 @@ class PartialIndex(Index):
             raise ValueError('Should never happen')
         return parameters
 
-    def create_sql(self, model, schema_editor, using=''):
+    def create_sql(self, model, schema_editor, using='', **kwargs):
         vendor = query.get_valid_vendor(schema_editor)
         sql_template = self.sql_create_index[vendor]
         sql_parameters = self.get_sql_create_template_values(model, schema_editor, using)
