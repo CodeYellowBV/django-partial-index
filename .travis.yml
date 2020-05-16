@@ -5,39 +5,25 @@ services:
 
 matrix:
   include:
-  - python: 2.7
-    env: DJANGO_VERSION=1.11.22
-  - python: 3.4
-    env: DJANGO_VERSION=1.11.22
-  - python: 3.5
-    env: DJANGO_VERSION=1.11.22
-  - python: 3.6
-    env: DJANGO_VERSION=1.11.22
-  - python: 3.7
-    env: DJANGO_VERSION=1.11.22
-
-  - python: 3.4
-    env: DJANGO_VERSION=2.0.13
-  - python: 3.5
-    env: DJANGO_VERSION=2.0.13
-  - python: 3.6
-    env: DJANGO_VERSION=2.0.13
-  - python: 3.7
-    env: DJANGO_VERSION=2.0.13
 
   - python: 3.5
-    env: DJANGO_VERSION=2.1.10
+    env: DJANGO_VERSION=2.2.12
   - python: 3.6
-    env: DJANGO_VERSION=2.1.10
+    env: DJANGO_VERSION=2.2.12
   - python: 3.7
-    env: DJANGO_VERSION=2.1.10
+    env: DJANGO_VERSION=2.2.12
+  - python: 3.8
+    env: DJANGO_VERSION=2.2.12
 
   - python: 3.5
-    env: DJANGO_VERSION=2.2.3
+    env: DJANGO_VERSION=3.0.6
   - python: 3.6
-    env: DJANGO_VERSION=2.2.3
+    env: DJANGO_VERSION=3.0.6
   - python: 3.7
-    env: DJANGO_VERSION=2.2.3
+    env: DJANGO_VERSION=3.0.6
+  - python: 3.8
+    env: DJANGO_VERSION=3.0.6
+
 
 install: "pip install --upgrade pip && pip install -q psycopg2 django==$DJANGO_VERSION djangorestframework==3.8.2"
 script: "./tests/runtests.py"

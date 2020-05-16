@@ -7,7 +7,7 @@ __version__ = '.'.join(str(v) for v in VERSION)
 __all__ = ['PartialIndex', 'PQ', 'PF', 'ValidatePartialUniqueMixin', 'PartialUniqueValidationError']
 
 
-MIN_DJANGO_VERSION = (1, 11)
+MIN_DJANGO_VERSION = (2, 2)
 DJANGO_VERSION_ERROR = 'Django version %s or later is required for django-partial-index.' % '.'.join(str(v) for v in MIN_DJANGO_VERSION)
 
 try:

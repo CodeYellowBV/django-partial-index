@@ -1,5 +1,4 @@
 from django.db.models import Index, Q
-from django.utils import six
 from django.utils.encoding import force_bytes
 import hashlib
 import warnings
@@ -12,7 +11,7 @@ def validate_where(where='', where_postgresql='', where_sqlite=''):
     if where:
         if where_postgresql or where_sqlite:
             raise ValueError('If providing a common where predicate, must not provide where_postgresql or where_sqlite.')
-        if isinstance(where, six.string_types):
+        if isinstance(where, str):
             warnings.warn(
                 'Text-based where predicates are deprecated, will be removed in a future release. ' +
                 'Please upgrade to where=PQ().',
@@ -27,7 +26,7 @@ def validate_where(where='', where_postgresql='', where_sqlite=''):
         if where_postgresql == where_sqlite:
             raise ValueError('If providing a separate where_postgresql and where_sqlite, then they must be different.' +
                              'If the same expression works for both, just use single where.')
-        if not isinstance(where_postgresql, six.string_types) or not isinstance(where_sqlite, six.string_types):
+        if not isinstance(where_postgresql, str) or not isinstance(where_sqlite, str):
             raise ValueError('where_postgresql and where_sqlite must be strings.')
         warnings.warn(
             'Text-based where predicates are deprecated, will be removed in a future release. ' +
@@ -152,7 +151,6 @@ class PartialIndex(Index):
             'Index too long for multiple database support. Is self.suffix '
             'longer than 3 characters?'
         )
-        self.check_name()
 
     @staticmethod
     def _hash_generator(*args):
