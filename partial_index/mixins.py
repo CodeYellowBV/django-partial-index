@@ -1,4 +1,5 @@
 from collections import defaultdict
+from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured, ValidationError, NON_FIELD_ERRORS
 from django.db.models import Q
 
@@ -45,14 +46,16 @@ class ValidatePartialUniqueMixin(object):
 
         # Merge ours into the existing errors (if any)
         try:
-            self.validate_partial_unique()
+            if getattr(settings, 'DJANGO_PARTIAL_INDEX_FORCE_VALIDATION', True):
+                exclude = None
+            self.validate_partial_unique(exclude=exclude)
         except ValidationError as e:
             errors.update(e.error_dict)
 
         if errors:
             raise PartialUniqueValidationError(errors)
 
-    def validate_partial_unique(self):
+    def validate_partial_unique(self, exclude=None):
         """Check partial unique constraints on the model and raise ValidationError if any failed.
 
         We want to check if another instance already exists with the fields mentioned in idx.fields, but only if idx.where matches.
@@ -70,6 +73,8 @@ class ValidatePartialUniqueMixin(object):
         """
         # Find PartialIndexes with unique=True defined on model.
         unique_idxs = [idx for idx in self._meta.indexes if isinstance(idx, PartialIndex) and idx.unique]
+
+        exclude = set(exclude) if exclude else set()
 
         if unique_idxs:
             model_fields = set(f.name for f in self._meta.get_fields(include_parents=True, include_hidden=True))
@@ -89,6 +94,10 @@ class ValidatePartialUniqueMixin(object):
                 if missing_fields:
                     raise RuntimeError('Unable to use ValidatePartialUniqueMixin: expecting to find fields %s on model. ' +
                                        'This is a bug in the PartialIndex definition or the django-partial-index library itself.')
+
+                # Skip indexes with excluded fields
+                if mentioned_fields & exclude:
+                    continue
 
                 values = {}
                 skip = False
